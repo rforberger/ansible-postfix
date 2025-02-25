@@ -1,0 +1,66 @@
+---
+
+- name: Install packages
+  ansible.builtin.apt:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - postfix
+    - postfix-pcre
+
+- name: Enable and start service
+  ansible.builtin.service:
+    name: postfix
+    enabled: yes
+    state: started
+
+- name: Write config
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/postfix/{{ item }}"
+    mode: 0644
+    owner: root
+    group: root
+  loop:
+    - aliases
+    - master.cf
+    - main.cf
+    - mydestinations.pcre
+    - header_checks.pcre
+    - generic
+    - sender_canonical
+    - header_check
+    - tls_policy
+
+- name: postmap
+  ansible.builtin.command:
+    cmd: "postmap /etc/postfix/{{ item }}"
+  loop:
+    - generic
+    - sender_canonical
+    - tls_policy
+  notify:
+    - postfix
+
+- name: postalias
+  ansible.builtin.command:
+    cmd: postalias /etc/postfix/aliases
+
+- name: Add postfix user to opendkim group
+  ansible.builtin.user:
+    name: postfix
+    groups: opendkim
+    append: yes
+  notify:
+    - postfix
+
+- name: Create OpenDKIM socket directory
+  ansible.builtin.file:
+    path: "/var/spool/postfix/opendkim/"
+    state: directory
+    owner: opendkim
+    group: opendkim
+
+
+
+

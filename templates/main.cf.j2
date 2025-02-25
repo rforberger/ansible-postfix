@@ -1,0 +1,168 @@
+soft_bounce = no
+queue_directory = /var/spool/postfix
+command_directory = /usr/sbin
+mail_owner = postfix
+#default_privs = nobody
+myhostname = {{ ansible_fqdn }}
+mydomain = {{ domain_name }}
+myorigin = $mydomain  
+# muss lokale domain sein!
+#inet_interfaces = all
+#inet_interfaces = $myhostname
+#inet_interfaces = $myhostname, localhost
+#proxy_interfaces =
+#proxy_interfaces = 1.2.3.4
+{% if primary_mailserver == True %}
+mydestination = pcre:/etc/postfix/mydestinations.pcre
+local_recipient_maps = unix:passwd.byname $alias_maps
+{% else %}
+local_recipient_maps = unix:passwd.byname
+{% endif %}
+unknown_local_recipient_reject_code = 450
+mynetworks_style = subnet
+mynetworks = {{ ansible_default_ipv4.address }}/32, 127.0.0.0/8, [::1]/128{% if primary_mailserver == True %}, {{ ansible_eth1.ipv4.network }}/{{ ansible_eth1.ipv4.netmask }}{% endif %}
+{% if primary_mailserver == False %}
+relay_domains = pcre:/etc/postfix/mydestinations.pcre
+{% endif %}
+{% if primary_mailserver == False %}
+relay_recipient_maps =
+{% endif %}
+#in_flow_delay = 1s
+alias_maps = hash://etc/postfix/aliases
+#recipient_delimiter = +
+{% if primary_mailserver == True %}
+home_mailbox = .maildir/
+{% endif %}
+#mail_spool_directory = /var/mail
+#mail_spool_directory = /var/spool/mail
+#mailbox_command = /some/where/procmail
+#mailbox_transport = lmtp:unix:/file/name
+#mailbox_transport = cyrus
+#mailbox_transport = lmtp:unix:public/lmtp
+#fallback_transport = lmtp:unix:/file/name
+#fallback_transport = cyrus
+#fallback_transport =
+#luser_relay = $user@other.host
+#luser_relay = $local@other.host
+#luser_relay = admin+$local
+#header_checks = regexp:/usr/local/etc/postfix/header_checks
+#fast_flush_domains = $relay_domains
+#fast_flush_domains =
+smtpd_banner = $myhostname ESMTP $mail_name
+#smtpd_banner = $myhostname ESMTP $mail_name ($mail_version)
+#local_destination_concurrency_limit = 2
+#default_destination_concurrency_limit = 20
+debug_peer_level = 255
+#debug_peer_list = 127.0.0.1
+#debug_peer_list = some.domain
+#debug_peer_list = mx.freenet.de
+debugger_command = PATH=/bin:/usr/bin; export PATH; (echo cont; echo where; sleep 10) | gdb $daemon_directory/$process_name $process_id 2>&1 >$config_directory/$process_name.$process_id.log & sleep 5 
+sendmail_path = /usr/sbin/sendmail
+newaliases_path = /usr/bin/newaliases
+mailq_path = /usr/bin/mailq
+setgid_group = postdrop
+html_directory = no
+manpage_directory = /usr/share/man
+sample_directory = /etc/postfix
+readme_directory = no
+default_database_type = hash
+indexed = ${default_database_type}:${config_directory}/
+smtpd_tls_key_file = /etc/letsencrypt/live/{{ ansible_hostname }}.{{ domain_name }}/privkey.pem
+smtpd_tls_cert_file = /etc/letsencrypt/live/{{ ansible_hostname }}.{{ domain_name }}/fullchain.pem
+smtpd_use_tls = yes
+smtp_tls_CApath = /etc/ssl/certs
+smtp_tls_loglevel = 1
+# smtpd_use_tls_only = yes
+#smtpd_tls_mandatory_ciphers = high
+#smtpd_tls_mandatory_exclude_ciphers = aNULL, MD5
+#smtpd_tls_security_level =may
+smtp_tls_policy_maps = ${indexed}tls_policy
+smtp_tls_note_starttls_offer = yes
+#smtpd_tls_mandatory_protocols = TLSv1
+smtpd_client_restrictions           = reject_unauth_pipelining,
+                                      permit
+smtpd_helo_required                 = yes
+unknown_hostname_reject_code        = 550
+smtpd_helo_restrictions             = permit_sasl_authenticated
+                                      reject_invalid_helo_hostname
+                                      reject_unknown_helo_hostname
+                                      reject_non_fqdn_helo_hostname
+                                      #check_helo_access hash:/usr/local/etc/postfix/helo_reject_domains,
+                                      permit
+
+smtpd_discard_ehlo_keywords         = silent-discard, dsn
+
+smtpd_sender_restrictions           = reject_unknown_sender_domain,
+                                      reject_non_fqdn_sender,
+                                      #check_sender_access hash:/usr/local/etc/postfix/sender_domain_reject,
+                                      #check_sender_access pcre:/usr/local/etc/postfix/sender_access.pcre,
+                                      permit
+
+smtpd_etrn_restrictions             = reject
+
+smtpd_relay_restrictions            = permit_sasl_authenticated,
+                                      reject_unauth_destination
+
+smtpd_recipient_restrictions        = permit_sasl_authenticated,
+                                      reject_non_fqdn_sender,
+                                      reject_unauth_destination,
+                                      reject_unknown_sender_domain,
+   				                      reject_unlisted_recipient,
+                                      reject_invalid_helo_hostname,
+                                      reject_non_fqdn_helo_hostname,
+                                      #check_recipient_access hash:/usr/local/etc/postfix/invalid_recipients,
+                                      reject_rhsbl_sender dsn.rfc-ignorant.org,
+                                      reject_rbl_client zen.spamhaus.org=127.0.0.[2..11]
+                                      reject_rhsbl_sender dbl.spamhaus.org=127.0.1.[2..99]
+                                      reject_rhsbl_helo dbl.spamhaus.org=127.0.1.[2..99]
+                                      reject_rhsbl_reverse_client dbl.spamhaus.org=127.0.1.[2..99]
+                                      warn_if_reject reject_rbl_client zen.spamhaus.org=127.255.255.[1..255]
+                                      permit
+
+header_checks                       = pcre:/etc/postfix/header_checks.pcre
+
+#smtp_sasl_auth_enable = yes
+#smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
+{% if primary_mailserver == True %}
+smtpd_sasl_auth_enable = yes
+smtpd_sasl_type = dovecot
+smtpd_sasl_path = private/auth
+smtpd_sasl_security_options = noanonymous, noplaintext
+smtpd_sasl_tls_security_options = noanonymous
+smtpd_tls_auth_only = yes
+{% else %}
+smtpd_sasl_auth_enable = no
+{% endif %}
+
+data_directory = /var/lib/postfix
+message_size_limit = 104857600
+mailbox_size_limit = 10485760000
+inet_protocols = ipv4
+{% if primary_mailserver == True %}
+smtp_generic_maps = hash:/etc/postfix/generic
+sender_canonical_maps = regexp:/etc/postfix/sender_canonical
+{% endif %}
+smtp_tls_security_level = may
+smtpd_tls_security_level = may
+
+smtpd_tls_mandatory_protocols = !SSLv2,!SSLv3,!TLSv1,!TLSv1.1
+smtpd_tls_protocols = !SSLv2,!SSLv3,!TLSv1,!TLSv1.1
+smtpd_tls_mandatory_ciphers = high
+tls_high_cipherlist = !aNULL:!eNULL:!CAMELLIA:HIGH:@STRENGTH
+tls_preempt_cipherlist = yes
+
+header_size_limit = 4096000
+smtp_sasl_security_options = noanonymous
+smtp_header_checks = regexp:/etc/postfix/header_check
+sender_canonical_classes = envelope_sender, header_sender
+
+daemon_directory=/usr/lib/postfix/sbin
+shlib_directory=/usr/lib/postfix
+
+compatibility_level = 2
+
+smtpd_milters = unix:opendkim/opendkim.sock
+non_smtpd_milters = $smtpd_milters
+
+milter_default_action = accept
+internal_mail_filter_classes = bounce

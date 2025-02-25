@@ -1,0 +1,9 @@
+---
+
+- name: postfix
+  ansible.builtin.service:
+    name: postfix
+    state: restarted
+
+
+
